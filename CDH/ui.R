@@ -1,15 +1,12 @@
 library(shiny)
 
-# Define UI for application that draws a histogram
-shinyUI(fluidPage(
+fluidPage(
   
-  # Application title
-  titlePanel("Countries in CDH"),
-  
-  # Sidebar with a slider input for number of bins 
+  titlePanel("Data in the Customer Data Hub"),
+
   sidebarLayout(
     sidebarPanel(
-       sliderInput(inputId = "bins",
+       sliderInput(inputId = "num",
                    label = "Number of countries to display:",
                    min = 2,
                    max = 20,
@@ -18,9 +15,10 @@ shinyUI(fluidPage(
        actionButton(inputId = "action", label = "Update")
     ),
     
-    # Show a plot of the generated distribution
     mainPanel(
-       plotOutput("countries")
+      tabsetPanel(type = "tabs",
+                  tabPanel("Number of Countries", plotOutput("barplot")),
+                  tabPanel("as Map", plotOutput("mapplot")))
     )
   )
-))
+)
