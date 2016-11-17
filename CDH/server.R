@@ -6,10 +6,11 @@ odbc.database = "biuser"
 odbc.user = "biuser"
 odbc.password = "test77"
 
-
-# Define server logic required to draw a histogram
 shinyServer(function(input, output) {
   output$countries <- renderPlot({
+    
+    input$action
+    
     bi_odbc <-
       odbcConnect("MongoBI", uid = odbc.user, pwd = odbc.password)
     
