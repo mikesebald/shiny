@@ -118,13 +118,13 @@ function(input, output) {
     colnames(subs) <- c("key", "source", "x", "y", "str", "hno", "city")
 
     coord <- subs$x
-    subs$x <- paste0(substr((coord), 1, nchar(coord) - 5), 
+    subs$x <- as.numeric(paste0(substr((coord), 1, nchar(coord) - 5), 
                      ".", 
-                     substr(coord, nchar(coord) - 4, nchar(coord)))
+                     substr(coord, nchar(coord) - 4, nchar(coord))))
     coord <- subs$y
-    subs$y <- paste0(substr((coord), 1, nchar(coord) - 5), 
+    subs$y <- as.numeric(paste0(substr((coord), 1, nchar(coord) - 5), 
                      ".", 
-                     substr(coord, nchar(coord) - 4, nchar(coord)))
+                     substr(coord, nchar(coord) - 4, nchar(coord))))
 
     m <- leaflet() %>%
       addTiles() %>%
