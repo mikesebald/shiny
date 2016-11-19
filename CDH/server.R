@@ -6,10 +6,12 @@ library(sp)
 library(rgdal)
 library(broom)
 library(ggplot2)
+library(leaflet)
 
-odbc.database = "biuser"
-odbc.user = "biuser"
+odbc.database = "replbiuser"
+odbc.user = "replbiuser"
 odbc.password = "test77"
+odbc.connection = "ReplMongoBI"
 
 world <- readOGR(dsn = "../../shiny_data/ne_50m_admin_0_countries.shp",
                  layer = "ne_50m_admin_0_countries")
@@ -33,7 +35,7 @@ function(input, output) {
     message("within barplot function")
     
     bi_odbc <-
-      odbcConnect("MongoBI", uid = odbc.user, pwd = odbc.password)
+      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
     
     postal_address <- sqlQuery(bi_odbc,
                                query = "select * from record_actual_validated_postal_address")
@@ -49,7 +51,7 @@ function(input, output) {
       geom_bar(stat = "identity",
                fill = "lightblue",
                colour = "red") +
-      geom_text(aes(label = Frequency), color = "palevioletred3", vjust = 1.5)
+      geom_text(aes(label = Frequency), color = "black", vjust = 1.5)
   })
   
   output$mapplot <- renderPlot({
@@ -58,7 +60,7 @@ function(input, output) {
     message("within mapplot function")
     
     bi_odbc <-
-      odbcConnect("MongoBI", uid = odbc.user, pwd = odbc.password)
+      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
     
     postal_address <- sqlQuery(bi_odbc,
                                query = "select * from record_actual_validated_postal_address")
@@ -92,5 +94,44 @@ function(input, output) {
     gg    
     
   })
+  
+  output$leaflet <- renderLeaflet({
+    message("within leafletplot function")
+
+    input$action
+
+    bi_odbc <-
+      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
+    
+    postal_address <- sqlQuery(bi_odbc,
+                               query = "select * from record_actual_validated_postal_address")
+    odbcClose(bi_odbc)
+    
+    subs <- subset(postal_address, !is.na(postal_address$validated.postal_address.x_coord))
+    subs <- subs[, c("_id.k", 
+                     "_id.s", 
+                     "validated.postal_address.x_coord", 
+                     "validated.postal_address.y_coord", 
+                     "validated.postal_address.str", 
+                     "validated.postal_address.hno", 
+                     "validated.postal_address.city")]
+    colnames(subs) <- c("key", "source", "x", "y", "str", "hno", "city")
+
+    coord <- subs$x
+    subs$x <- paste0(substr((coord), 1, nchar(coord) - 5), 
+                     ".", 
+                     substr(coord, nchar(coord) - 4, nchar(coord)))
+    coord <- subs$y
+    subs$y <- paste0(substr((coord), 1, nchar(coord) - 5), 
+                     ".", 
+                     substr(coord, nchar(coord) - 4, nchar(coord)))
+
+    m <- leaflet() %>%
+      addTiles() %>%
+      addMarkers(lng = subs$x,
+                 lat = subs$y,
+                 popup = paste0(subs$str, " ", subs$hno, ", ", subs$city))
+    m
+  })  
 }
 

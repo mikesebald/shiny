@@ -1,4 +1,5 @@
 library(shiny)
+library(leaflet)
 
 fluidPage(
   
@@ -18,7 +19,8 @@ fluidPage(
     mainPanel(
       tabsetPanel(type = "tabs",
                   tabPanel("Number of Countries", plotOutput("barplot")),
-                  tabPanel("as Map", plotOutput("mapplot")))
+                  tabPanel("as Map", plotOutput("mapplot")),
+                  tabPanel("as Leaflet", leafletOutput("leaflet")))
     )
   )
 )
