@@ -58,7 +58,40 @@ SELECT COUNT(*) FROM record_history_validated_person WHERE "validated.status" = 
 SELECT COUNT(*) FROM record_history_validated_organization WHERE "validated.status" = 'valid' AND "validated.type" = 'organization' AND ("_id.r" >= 10 AND "_id.r" <= 19);
 SELECT COUNT(*) FROM record_history_validated_organization WHERE "validated.status" = 'valid' AND "validated.type" = 'organization' AND ("_id.r" >= 10 AND "_id.r" <= 39);
 
+-- !!! Below logically not correct
 -- (Number of) invalid addresses
-SELECT * FROM record_history_validated_postal_address_validation_message WHERE "validated.postal_address.validation_message.is_error" = 'true' AND "validated.postal_address.validation_message.type" = 'uniserv_address' AND ("_id.r" >= 1 AND "_id.r" <= 10000);
+SELECT * FROM record_history_validated_postal_address_validation_message WHERE "validated.postal_address.validation_message.is_error" = 'true' AND "validated.postal_address.validation_message.type" = 'uniserv_address' AND "_id.r" <= 5;
 -- Number OF RECORDS with invalid addresses
-SELECT COUNT(DISTINCT "_id.k") FROM record_history_validated_postal_address_validation_message WHERE "validated.postal_address.validation_message.is_error" = 'true' AND "validated.postal_address.validation_message.type" = 'uniserv_address' AND ("_id.r" >= 1 AND "_id.r" <= 1506);
+SELECT COUNT(DISTINCT "_id.k") FROM record_history_validated_postal_address_validation_message WHERE "validated.postal_address.validation_message.is_error" = 'true' AND "validated.postal_address.validation_message.type" = 'uniserv_address' AND "_id.r" <= 3;
+
+
+-- Okay, this one works!
+SELECT a.* 
+FROM record_history_validated_postal_address a
+INNER JOIN (
+    SELECT "_id.k", MAX("_id.r") sidr
+    FROM record_history_validated_postal_address 
+    WHERE "_id.r" <= 8
+    GROUP BY "_id.k"
+) s
+ON (s."_id.k" = a."_id.k" AND sidr = a."_id.r" AND a."validated.postal_address.status" = 'invalid'
+)
+
+-- But we want to read the validation error messages as well
+SELECT *
+FROM record_history_validated_postal_address_validation_message o
+INNER JOIN (
+    SELECT a."_id.k", a."_id.r"
+    FROM record_history_validated_postal_address a
+    INNER JOIN (
+        SELECT "_id.k", MAX("_id.r") sidr
+        FROM record_history_validated_postal_address 
+        WHERE "_id.r" <= 8
+        GROUP BY "_id.k"
+    ) s
+    ON (s."_id.k" = a."_id.k" AND sidr = a."_id.r" AND a."validated.postal_address.status" = 'invalid')
+) q
+ON (o."_id.k" = q."_id.k" AND o."_id.r" = q."_id.r")
+WHERE o."validated.postal_address.validation_message.is_error" = 'true' AND o."validated.postal_address.validation_message.type" = 'uniserv_address'
+
+
