@@ -7,40 +7,53 @@ library(rgdal)
 library(broom)
 library(ggplot2)
 library(leaflet)
+library(htmltools)
+library(data.table)
 
-odbc.database = "replbiuser"
-odbc.user = "replbiuser"
-odbc.password = "test77"
-odbc.connection = "ReplMongoBI"
+if (is.null(postal_address)) {
+  odbc.database = "biuser"
+  odbc.user = "biuser"
+  odbc.password = "test77"
+  odbc.connection = "MongoBI"
+  
+  message("Connecting to database")
+  bi_odbc <-
+    odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
+  
+  message("Reading data")
+  postal_address <- sqlQuery(bi_odbc,
+                             query = "select * from record_actual_validated_postal_address")
 
-world <- readOGR(dsn = "../../shiny_data/ne_50m_admin_0_countries.shp",
-                 layer = "ne_50m_admin_0_countries")
-
-# remove antarctica
-world <- world[!world$iso_a3 %in% c("ATA"), ]
-
-# change projection
-world <- spTransform(world, CRS("+proj=wintri"))
-
-# group coordinates by ISO2 country code
-map <- tidy(world, region = "iso_a2")
+  message("done. Disconnecting.")
+  odbcClose(bi_odbc)
+  
+  world <-
+    readOGR(dsn = "../../shiny_data/ne_50m_admin_0_countries.shp",
+            layer = "ne_50m_admin_0_countries")
+  
+  # world <-
+  #   readOGR(dsn = "../shiny_data/ne_50m_admin_0_countries.shp",
+  #           layer = "ne_50m_admin_0_countries")
+  
+  # remove antarctica
+  world <- world[!world$iso_a3 %in% c("ATA"),]
+  
+  # change projection
+  world <- spTransform(world, CRS("+proj=wintri"))
+  
+  # group coordinates by ISO2 country code
+  map <- tidy(world, region = "iso_a2")
+}
 
 message("within server.R function")
 
 function(input, output) {
-  output$barplot <- renderPlot({
+  output$countries_plot <- renderPlot({
     
     input$action
     
-    message("within barplot function")
-    
-    bi_odbc <-
-      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
-    
-    postal_address <- sqlQuery(bi_odbc,
-                               query = "select * from record_actual_validated_postal_address")
-    odbcClose(bi_odbc)
-    
+    message("within countries_plot function")
+
     countries <-
       table(postal_address$validated.postal_address.country_code)
     
@@ -54,22 +67,15 @@ function(input, output) {
       geom_text(aes(label = Frequency), color = "black", vjust = 1.5)
   })
   
-  output$mapplot <- renderPlot({
+  output$map_plot <- renderPlot({
     input$action
     
-    message("within mapplot function")
-    
-    bi_odbc <-
-      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
-    
-    postal_address <- sqlQuery(bi_odbc,
-                               query = "select * from record_actual_validated_postal_address")
-    odbcClose(bi_odbc)
-    
+    message("within map_plot function")
+
     countries <-
       table(postal_address$validated.postal_address.country_code)
     
-    countries <- as.data.frame(sort(countries, decreasing = TRUE)[1:input$num])
+    countries <- as.data.frame(sort(countries, decreasing = TRUE))
     colnames(countries) <- c("Country", "Frequency")
 
     gg <- ggplot()
@@ -91,22 +97,15 @@ function(input, output) {
                      axis.ticks.y = element_blank())
     gg <- gg + theme(legend.position = "bottom")
     gg <- gg + coord_equal(ratio = 1)
-    gg    
+    gg
     
-  })
+  }, height = 600, width = 1000)
   
   output$leaflet <- renderLeaflet({
     message("within leafletplot function")
 
     input$action
 
-    bi_odbc <-
-      odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
-    
-    postal_address <- sqlQuery(bi_odbc,
-                               query = "select * from record_actual_validated_postal_address")
-    odbcClose(bi_odbc)
-    
     subs <- subset(postal_address, !is.na(postal_address$validated.postal_address.x_coord))
     subs <- subs[, c("_id.k", 
                      "_id.s", 
@@ -130,8 +129,65 @@ function(input, output) {
       addTiles() %>%
       addMarkers(lng = subs$x,
                  lat = subs$y,
-                 popup = paste0(subs$str, " ", subs$hno, ", ", subs$city))
+                 popup = htmlEscape(paste0(subs$str, " ", 
+                                           subs$hno, ", ", 
+                                           subs$city)),
+                 clusterOptions = markerClusterOptions())
     m
+  })
+  
+  output$address_errors <- renderPlot({
+    
+    input$action
+    
+    message("within address_errors function")
+    
+    revision_1 <- input$revision_1
+    revision_2 <- input$revision_2
+    
+    relevant_revisions <- subset(record_history_validated_postal_address,
+                                 `_id.r` <= revision_1)
+    highest_revisions <- relevant_revisions[ , max(`_id.r`), by = `_id.k`]
+    colnames(highest_revisions)[2] <- "_id.r"
+    
+    setkey(record_history_validated_postal_address, `_id.k`, `_id.r`)
+    setkey(highest_revisions, `_id.k`, `_id.r`)
+    
+    postal_address_errors <- record_history_validated_postal_address[highest_revisions, nomatch = 0] %>%
+      subset(validated.postal_address.status == "invalid")
+
+    setkey(record_history_validated_postal_address_validation_message, `_id.k`, `_id.r`)
+    postal_address_messages <- record_history_validated_postal_address_validation_message[postal_address_errors, nomatch = 0] %>%
+      subset(validated.postal_address.validation_message.is_error == 1 & validated.postal_address.validation_message.type == "uniserv_address")
+    
+    messages_1 <- as.data.frame(table(as.character(postal_address_messages$validated.postal_address.validation_message.code)))
+    messages_1 <- cbind(messages_1, revision_1)
+    colnames(messages_1) <- c("Validation Message", "Frequency", "Revision")
+    
+    relevant_revisions <- subset(record_history_validated_postal_address,
+                                 `_id.r` <= revision_2)
+    highest_revisions <- relevant_revisions[ , max(`_id.r`), by = `_id.k`]
+    colnames(highest_revisions)[2] <- "_id.r"
+    
+    setkey(record_history_validated_postal_address, `_id.k`, `_id.r`)
+    setkey(highest_revisions, `_id.k`, `_id.r`)
+    
+    postal_address_errors <- record_history_validated_postal_address[highest_revisions, nomatch = 0] %>%
+      subset(validated.postal_address.status == "invalid")
+    
+    setkey(record_history_validated_postal_address_validation_message, `_id.k`, `_id.r`)
+    postal_address_messages <- record_history_validated_postal_address_validation_message[postal_address_errors, nomatch = 0] %>%
+      subset(validated.postal_address.validation_message.is_error == 1 & validated.postal_address.validation_message.type == "uniserv_address")
+    
+    messages_2 <- as.data.frame(table(as.character(postal_address_messages$validated.postal_address.validation_message.code)))
+    messages_2 <- cbind(messages_2, revision_2)
+    colnames(messages_2) <- c("Validation Message", "Frequency", "Revision")
+
+    messages <- rbind(messages_1, messages_2)
+    messages$Revision <- as.factor(messages$Revision)
+        
+    ggplot(messages, aes(x = `Validation Message`, y = Frequency)) +
+      geom_bar(aes(fill = messages$Revision), position = "dodge", stat = "identity")
+
   })  
 }
-
