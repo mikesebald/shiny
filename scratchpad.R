@@ -9,6 +9,7 @@ library(microbenchmark)
 library(data.table)
 library(sqldf)
 library(dplyr)
+library(RMySQL)
 
 # data source: http://www.naturalearthdata.com/downloads/50m-cultural-vectors/
 world <- readOGR(dsn = "../shiny_data/ne_50m_admin_0_countries.shp",
@@ -45,10 +46,14 @@ gg <- gg + coord_equal(ratio = 1)
 gg
 
 
-odbc.database = "biuser"
-odbc.user = "biuser"
+# odbc.database = "biuser"
+# odbc.user = "biuser"
+# odbc.password = "test77"
+# odbc.connection = "MongoBI"
+odbc.database = "cdh"
+odbc.user = "cdh"
 odbc.password = "test77"
-odbc.connection = "MongoBI"
+odbc.connection = "MongoDB_BI_2.0"
 
 message("Connecting to database")
 bi_odbc <-
@@ -204,4 +209,49 @@ nrow(postal_address_messages)
 x2 <- table(as.character(postal_address_messages$validated.postal_address.validation_message.code))
 identical(x1, x2)
 
+
+
+
+
+bi_odbc <-
+  odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
+
+# TODO: need to check, if setorder() is necessary/makes a difference
+query <-
+  paste0("SELECT * FROM record_history_validated_postal_address_validation_message")
+x1 <- as.data.table(sqlQuery(bi_odbc, query))
+
+query <-
+  paste0("SELECT * FROM record_history_validated_postal_address")
+x2 <- as.data.table(sqlQuery(bi_odbc, query))
+
 odbcClose(bi_odbc)
+
+
+
+
+# Using the new MongoDB BI Connector 2.0.0
+
+con <- dbConnect(RMySQL::MySQL(), dbname = "cdh2", port = 3307)
+
+dbSendQuery(con, "SET NAMES utf8;")
+dbSendQuery(con, "SET CHARACTER SET utf8")
+
+
+y <- dbReadTable(con, "record_actual_validated_postal_address")
+
+y2 <- dbReadTable(con, "record_history_validated_postal_address")
+Encoding(y2$validated.postal_address.city) <- "UTF-8"
+
+dbGetQuery(con, "SET NAMES utf8")
+dbGetQuery(con, "show variables like 'character_set_%'")
+
+query <-
+  paste0("SELECT * FROM record_history_validated_postal_address")
+y2 <- as.data.table(dbGetQuery(con, query))
+
+dbDisconnect(con)
+
+# But using ODBC to connect to the new MongoDB BI Connector 2.0.0 seems 
+# to be the way forward
+

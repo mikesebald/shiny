@@ -39,7 +39,7 @@ fluidPage(
                                               height = 600)
                                 ),
                        tabPanel("Validation Errors", 
-                                plotOutput("address_errors",
+                                plotlyOutput("address_errors",
                                            height = 500),
                                 sliderInput(inputId = "revision_1",
                                             label = "Revision 1:",

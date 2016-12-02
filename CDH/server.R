@@ -9,20 +9,43 @@ library(ggplot2)
 library(leaflet)
 library(htmltools)
 library(data.table)
+library(plotly)
 
-if (is.null(postal_address)) {
-  odbc.database = "biuser"
-  odbc.user = "biuser"
+if (!exists("postal_address")) {
+  # odbc.database = "biuser"
+  # odbc.user = "biuser"
+  # odbc.password = "test77"
+  # odbc.connection = "MongoBI"
+  odbc.database = "cdh"
+  odbc.user = "cdh"
   odbc.password = "test77"
-  odbc.connection = "MongoBI"
+  odbc.connection = "MongoDB_BI_2.0"
   
   message("Connecting to database")
   bi_odbc <-
     odbcConnect(dsn = odbc.connection, uid = odbc.user, pwd = odbc.password)
   
-  message("Reading data")
+  message("Reading data from postal_address table")
   postal_address <- sqlQuery(bi_odbc,
                              query = "select * from record_actual_validated_postal_address")
+
+  message("done. Reading data from record_history_validated_postal_address_validation_message table")
+  
+  query <-
+    paste0("SELECT * FROM record_history_validated_postal_address_validation_message")
+  record_history_validated_postal_address_validation_message <-
+    as.data.table(sqlQuery(bi_odbc, query))
+  record_history_validated_postal_address_validation_message$`_id.k` <-
+    as.character(record_history_validated_postal_address_validation_message$`_id.k`)
+
+  message("done. Reading data from record_history_validated_postal_address table")
+
+  query <-
+    paste0("SELECT * FROM record_history_validated_postal_address")
+  record_history_validated_postal_address <-
+    as.data.table(sqlQuery(bi_odbc, query))
+  record_history_validated_postal_address$`_id.k` <-
+    as.character(record_history_validated_postal_address$`_id.k`)
 
   message("done. Disconnecting.")
   odbcClose(bi_odbc)
@@ -97,8 +120,8 @@ function(input, output) {
                      axis.ticks.y = element_blank())
     gg <- gg + theme(legend.position = "bottom")
     gg <- gg + coord_equal(ratio = 1)
+
     gg
-    
   }, height = 600, width = 1000)
   
   output$leaflet <- renderLeaflet({
@@ -136,7 +159,7 @@ function(input, output) {
     m
   })
   
-  output$address_errors <- renderPlot({
+  output$address_errors <- renderPlotly({
     
     input$action
     
@@ -186,8 +209,8 @@ function(input, output) {
     messages <- rbind(messages_1, messages_2)
     messages$Revision <- as.factor(messages$Revision)
         
-    ggplot(messages, aes(x = `Validation Message`, y = Frequency)) +
+    gg <- ggplot(messages, aes(x = `Validation Message`, y = Frequency)) +
       geom_bar(aes(fill = messages$Revision), position = "dodge", stat = "identity")
-
+    ggplotly(gg)
   })  
 }
